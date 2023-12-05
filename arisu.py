@@ -1,6 +1,7 @@
 import math
 import time
 import krpc
+import threading
 from numpy import pi, dot, cross, array, arccos, sign
 from numpy.linalg import norm
 
@@ -30,6 +31,7 @@ def angle_between(obj1, obj2, conn):
 
     return angle
 
+
 def time_until_phase(obj1, obj2, phase, conn):
     ''' find time until angle between obj1 and obj2 is phase '''
     angle = angle_between(obj1, obj2, conn)
@@ -55,7 +57,6 @@ def launch_phase():
     vessel.control.throttle = 1.0
     time.sleep(1)
     print('Launch!')
-
 
     # Activate the first stage
     vessel.control.activate_next_stage()
@@ -90,6 +91,8 @@ def launch_phase():
             print('Approaching target apoapsis')
             break
 
+
+
     # Disable engines when target apoapsis is reached
     vessel.control.throttle = 0.25
     while apoapsis() < target_altitude:
@@ -106,7 +109,8 @@ def launch_phase():
     while altitude() < 70500:
         pass
 
-def kerbin_circularization_phase():
+
+def kerbin_circularization_burn():
     # Plan circularization burn (using vis-viva equation)
     print('Planning circularization burn')
     mu = vessel.orbit.body.gravitational_parameter
@@ -162,7 +166,8 @@ def kerbin_circularization_phase():
     vessel.control.sas_mode = conn.space_center.SASMode.prograde
     print('SAS set to prograde')
 
-def moon_phase():
+
+def mun_phase():
     global state
     r_kerbin = vessel.orbit.semi_major_axis
     mu = vessel.orbit.body.gravitational_parameter
@@ -206,8 +211,8 @@ def moon_phase():
     assert time_to_change_of_soi > 0
     conn.space_center.warp_to(ut() + time_to_change_of_soi + 10)
 
-def moon_circularization_phase():
-    global state
+def mun_circularization_phase():
+    # get new orbit parameters and prepare to stabilize orbit
     mu = vessel.orbit.body.gravitational_parameter
     r = vessel.orbit.periapsis
     a1 = vessel.orbit.semi_major_axis
@@ -231,7 +236,7 @@ def moon_circularization_phase():
     print('Waiting until second circularization burn')
     time_to_periapsis = conn.add_stream(getattr, vessel.orbit, 'time_to_periapsis')
     burn_ut = ut() + time_to_periapsis() - (burn_time / 2)
-    lead_time = 5  # warp turns off SAS, give time to reorient
+    lead_time = 15  # warp turns off SAS, give time to reorient
     conn.space_center.warp_to(burn_ut - lead_time)
 
     # use SAS for reotrgrade burn
@@ -252,8 +257,6 @@ def moon_circularization_phase():
     vessel.control.activate_next_stage()
     state = False
 
-
-# Connect to KSP
 conn = krpc.connect(name='Lunae lumen')
 vessel = conn.space_center.active_vessel
 state = True
@@ -262,14 +265,12 @@ state = True
 ut = conn.add_stream(getattr, conn.space_center, 'ut')
 altitude = conn.add_stream(getattr, vessel.flight(), 'mean_altitude')
 apoapsis = conn.add_stream(getattr, vessel.orbit, 'apoapsis_altitude')
-stage_2_resources = vessel.resources_in_decouple_stage(stage=2, cumulative=False)
 stage_3_resources = vessel.resources_in_decouple_stage(stage=3, cumulative=False)
-
+stage_2_resources = vessel.resources_in_decouple_stage(stage=2, cumulative=False)
 liq_fuel3 = conn.add_stream(stage_3_resources.amount, 'LiquidFuel')
 liq_fuel2 = conn.add_stream(stage_2_resources.amount, 'LiquidFuel')
 
-# phases
 launch_phase()
-kerbin_circularization_phase()
-moon_phase()
-moon_circularization_phase()
+kerbin_circularization_burn()
+mun_phase()
+mun_circularization_phase()
